@@ -1,13 +1,17 @@
 # LatenSeer
 The repo for SoCC23 Paper: LatenSeer: Causal Modeling of End-to-End Latency Distributions by Harnessing Distributed Tracing.
 
+<div style="text-align: center;">
+  <img src="/doc/diagram/latenseer.svg" alt="diagram" width="480"/>
+</div>
+
 ## What is LatenSeer
 LatenSeer is a modeling framework for estimating end-to-end latency distributions in microservice-based web applications.
 - An offline tool.
 - Harnesses distributed tracing.
 - Enables what-if analysis, predicting the potential impacts on end-to-end latency distribution due to various changes in service latencies.
 
-## Usage
+## Example Usage
 
 ## Citation
 ```bibtex
