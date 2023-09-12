@@ -1,0 +1,33 @@
+# This file is used to map services to nodes. 
+# Update this file to change the mapping.
+nginx_web_server: ynode0
+home_timeline_service: ynode0
+media_frontend: ynode0
+social_graph_service: ynode0
+compose_post_service: ynode1
+post_storage_service: ynode1
+text_service: ynode1
+url_shorten_service: ynode1
+media_service: ynode2
+user_mention_service: ynode2
+user_service: ynode2
+unique_id_service: ynode2
+user_timeline_service: ynode3
+cassandra_schema: ynode3
+cassandra: ynode3
+jaeger_collector: ynode4
+jaeger_agent: ynode4
+jaeger_query: ynode4
+home_timeline_redis: ynode5
+social_graph_redis: ynode5
+user_timeline_mongodb: ynode5
+user_timeline_redis: ynode5
+media_memcached: ynode6
+post_storage_memcached: ynode6
+url_shorten_memcached: ynode6
+user_memcached: ynode6
+media_mongodb: ynode7
+social_graph_mongodb: ynode7
+url_shorten_mongodb: ynode7
+user_mongodb: ynode7
+post_storage_mongodb: ynode7

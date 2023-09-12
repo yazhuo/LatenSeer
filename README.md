@@ -11,7 +11,24 @@ LatenSeer is a modeling framework for estimating end-to-end latency distribution
 - Harnesses distributed tracing.
 - Enables what-if analysis, predicting the potential impacts on end-to-end latency distribution due to various changes in service latencies.
 
-## Example Usage
+## Repo Structure
+The repo includes the [source code](src/) of LatenSeer, [scripts](scripts/) for setting up DSB experiments, and a [script](src/fetch_dsb_traces.py) for collecting DSB Jaeger traces.
+
+### How to use LatenSeer
+
+First, you can create a virtual environment and activate it:
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
+
+Then install LatenSeer:
+```bash
+pip install .
+```
+
+Now you are good to do a test run. We provide a [simple tutorial](examples/simple_tutorial.ipynb) about how to use LatenSeer.
+
 
 ## Citation
 ```bibtex

@@ -1,0 +1,552 @@
+networks:
+  default:
+    driver: overlay
+    ipam:
+      config:
+      - subnet: 10.11.0.0/16
+      driver: default
+services:
+  cassandra:
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode3.latenseer.latencymodel-pg0.utah.cloudlab.us"
+    image: cassandra:3.9
+  cassandra-schema:
+    depends_on:
+    - cassandra
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode3.latenseer.latencymodel-pg0.utah.cloudlab.us"
+      restart_policy:
+        condition: on-failure
+    image: jaegertracing/jaeger-cassandra-schema
+  compose-post-service:
+    command:
+    - "ComposePostService"
+    depends_on:
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode1.latenseer.latencymodel-pg0.utah.cloudlab.us"
+      replicas: 1
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+      restart_policy:
+        condition: any
+    hostname: compose-post-service
+    image: deathstarbench/social-network-microservices:latest
+    volumes:
+    - ./config:/social-network-microservices/config
+    - ./keys:/keys
+  home-timeline-redis:
+    command: "redis-server /social-network-microservices/config/redis.conf"
+    depends_on:
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode5.latenseer.latencymodel-pg0.utah.cloudlab.us"
+    hostname: home-timeline-redis
+    image: redis
+    volumes:
+    - ./config:/social-network-microservices/config
+    - ./keys:/keys
+  home-timeline-service:
+    command:
+    - "HomeTimelineService"
+    depends_on:
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode0.latenseer.latencymodel-pg0.utah.cloudlab.us"
+      replicas: 1
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+      restart_policy:
+        condition: any
+    hostname: home-timeline-service
+    image: deathstarbench/social-network-microservices:latest
+    volumes:
+    - ./config:/social-network-microservices/config
+    - ./keys:/keys
+  jaeger-agent:
+    command:
+    - "--reporter.grpc.host-port=jaeger-collector:14250"
+    depends_on:
+    - jaeger-collector
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode4.latenseer.latencymodel-pg0.utah.cloudlab.us"
+      restart_policy:
+        condition: any
+    hostname: jaeger-agent
+    image: jaegertracing/jaeger-agent:latest
+  jaeger-collector:
+    command:
+    - "--cassandra.keyspace=jaeger_v1_dc1"
+    - "--cassandra.servers=cassandra"
+    - "--collector.zipkin.host-port=9411"
+    - "--collector.num-workers=100"
+    - "--collector.queue-size=100000"
+    depends_on:
+    - cassandra-schema
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode4.latenseer.latencymodel-pg0.utah.cloudlab.us"
+      restart_policy:
+        condition: any
+    image: jaegertracing/jaeger-collector
+    ports:
+    - 14269:14269
+  jaeger-query:
+    command:
+    - "--cassandra.keyspace=jaeger_v1_dc1"
+    - "--cassandra.servers=cassandra"
+    depends_on:
+    - cassandra-schema
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode4.latenseer.latencymodel-pg0.utah.cloudlab.us"
+      restart_policy:
+        condition: any
+    image: jaegertracing/jaeger-query
+    ports:
+    - 16686:16686
+  media-frontend:
+    depends_on:
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode0.latenseer.latencymodel-pg0.utah.cloudlab.us"
+      replicas: 1
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+      restart_policy:
+        condition: any
+    hostname: media-frontend
+    image: yg397/media-frontend:xenial
+    ports:
+    - 8081:8080
+    volumes:
+    - ./media-frontend/lua-scripts:/usr/local/openresty/nginx/lua-scripts
+    - ./media-frontend/conf/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
+  media-memcached:
+    command:
+    - "-m 16384"
+    - "-t 8"
+    - "-I 32m"
+    - "-c 4096"
+    depends_on:
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode6.latenseer.latencymodel-pg0.utah.cloudlab.us"
+    hostname: media-memcached
+    image: memcached
+  media-mongodb:
+    command: "mongod --nojournal --quiet --config /social-network-microservices/config/mongod.conf"
+    depends_on:
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode7.latenseer.latencymodel-pg0.utah.cloudlab.us"
+    hostname: media-mongodb
+    image: mongo
+    volumes:
+    - ./config:/social-network-microservices/config
+    - ./keys:/keys
+  media-service:
+    command:
+    - "MediaService"
+    depends_on:
+    - media-mongodb
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode2.latenseer.latencymodel-pg0.utah.cloudlab.us"
+      replicas: 1
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+      restart_policy:
+        condition: any
+    hostname: media-service
+    image: deathstarbench/social-network-microservices:latest
+    volumes:
+    - ./config:/social-network-microservices/config
+    - ./keys:/keys
+  nginx-web-server:
+    depends_on:
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode0.latenseer.latencymodel-pg0.utah.cloudlab.us"
+      replicas: 1
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+      restart_policy:
+        condition: any
+    hostname: nginx-web-server
+    image: yg397/openresty-thrift:xenial
+    ports:
+    - 8080:8080
+    volumes:
+    - ./nginx-web-server/lua-scripts:/usr/local/openresty/nginx/lua-scripts
+    - ./nginx-web-server/pages:/usr/local/openresty/nginx/pages
+    - ./nginx-web-server/conf/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
+    - ./nginx-web-server/jaeger-config.json:/usr/local/openresty/nginx/jaeger-config.json
+    - ./gen-lua:/gen-lua
+    - ./docker/openresty-thrift/lua-thrift:/usr/local/openresty/lualib/thrift
+    - ./keys:/keys
+  post-storage-memcached:
+    command:
+    - "-m 16384"
+    - "-t 8"
+    - "-I 32m"
+    - "-c 4096"
+    depends_on:
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode6.latenseer.latencymodel-pg0.utah.cloudlab.us"
+    hostname: post-storage-memcached
+    image: memcached
+  post-storage-mongodb:
+    command: "mongod --nojournal --quiet --config /social-network-microservices/config/mongod.conf"
+    depends_on:
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode7.latenseer.latencymodel-pg0.utah.cloudlab.us"
+    hostname: post-storage-mongodb
+    image: mongo
+    volumes:
+    - ./config:/social-network-microservices/config
+    - ./keys:/keys
+  post-storage-service:
+    command:
+    - "PostStorageService"
+    depends_on:
+    - post-storage-mongodb
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode1.latenseer.latencymodel-pg0.utah.cloudlab.us"
+      replicas: 1
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+      restart_policy:
+        condition: any
+    hostname: post-storage-service
+    image: deathstarbench/social-network-microservices:latest
+    volumes:
+    - ./config:/social-network-microservices/config
+    - ./keys:/keys
+  social-graph-mongodb:
+    command: "mongod --nojournal --quiet --config /social-network-microservices/config/mongod.conf"
+    depends_on:
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode7.latenseer.latencymodel-pg0.utah.cloudlab.us"
+    hostname: social-graph-mongodb
+    image: mongo
+    volumes:
+    - ./config:/social-network-microservices/config
+    - ./keys:/keys
+  social-graph-redis:
+    command: "redis-server /social-network-microservices/config/redis.conf"
+    depends_on:
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode5.latenseer.latencymodel-pg0.utah.cloudlab.us"
+    hostname: social-graph-redis
+    image: redis
+    volumes:
+    - ./config:/social-network-microservices/config
+    - ./keys:/keys
+  social-graph-service:
+    command:
+    - "SocialGraphService"
+    depends_on:
+    - jaeger-agent
+    - jaeger-query
+    - social-graph-mongodb
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode0.latenseer.latencymodel-pg0.utah.cloudlab.us"
+      replicas: 1
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+      restart_policy:
+        condition: any
+    hostname: social-graph-service
+    image: deathstarbench/social-network-microservices:latest
+    volumes:
+    - ./config:/social-network-microservices/config
+    - ./keys:/keys
+  text-service:
+    command:
+    - "TextService"
+    depends_on:
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode1.latenseer.latencymodel-pg0.utah.cloudlab.us"
+      replicas: 1
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+      restart_policy:
+        condition: any
+    hostname: text-service
+    image: deathstarbench/social-network-microservices:latest
+    volumes:
+    - ./config:/social-network-microservices/config
+    - ./keys:/keys
+  unique-id-service:
+    command:
+    - "UniqueIdService"
+    depends_on:
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode2.latenseer.latencymodel-pg0.utah.cloudlab.us"
+      replicas: 1
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+      restart_policy:
+        condition: any
+    hostname: unique-id-service
+    image: deathstarbench/social-network-microservices:latest
+    volumes:
+    - ./config:/social-network-microservices/config
+    - ./keys:/keys
+  url-shorten-memcached:
+    command:
+    - "-m 16384"
+    - "-t 8"
+    - "-I 32m"
+    - "-c 4096"
+    depends_on:
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode6.latenseer.latencymodel-pg0.utah.cloudlab.us"
+    hostname: url-shorten-memcached
+    image: memcached
+  url-shorten-mongodb:
+    command: "mongod --nojournal --quiet --config /social-network-microservices/config/mongod.conf"
+    depends_on:
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode7.latenseer.latencymodel-pg0.utah.cloudlab.us"
+    hostname: url-shorten-mongodb
+    image: mongo
+    volumes:
+    - ./config:/social-network-microservices/config
+    - ./keys:/keys
+  url-shorten-service:
+    command:
+    - "UrlShortenService"
+    depends_on:
+    - url-shorten-mongodb
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode1.latenseer.latencymodel-pg0.utah.cloudlab.us"
+      replicas: 1
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+      restart_policy:
+        condition: any
+    hostname: url-shorten-service
+    image: deathstarbench/social-network-microservices:latest
+    volumes:
+    - ./config:/social-network-microservices/config
+    - ./keys:/keys
+  user-memcached:
+    command:
+    - "-m 16384"
+    - "-t 8"
+    - "-I 32m"
+    - "-c 4096"
+    depends_on:
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode6.latenseer.latencymodel-pg0.utah.cloudlab.us"
+    hostname: user-memcached
+    image: memcached
+  user-mention-service:
+    command:
+    - "UserMentionService"
+    depends_on:
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode2.latenseer.latencymodel-pg0.utah.cloudlab.us"
+      replicas: 1
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+      restart_policy:
+        condition: any
+    hostname: user-mention-service
+    image: deathstarbench/social-network-microservices:latest
+    volumes:
+    - ./config:/social-network-microservices/config
+    - ./keys:/keys
+  user-mongodb:
+    command: "mongod --nojournal --quiet --config /social-network-microservices/config/mongod.conf"
+    depends_on:
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode7.latenseer.latencymodel-pg0.utah.cloudlab.us"
+    hostname: user-mongodb
+    image: mongo
+    volumes:
+    - ./config:/social-network-microservices/config
+    - ./keys:/keys
+  user-service:
+    command:
+    - "UserService"
+    depends_on:
+    - user-mongodb
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode2.latenseer.latencymodel-pg0.utah.cloudlab.us"
+      replicas: 1
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+      restart_policy:
+        condition: any
+    hostname: user-service
+    image: deathstarbench/social-network-microservices:latest
+    volumes:
+    - ./config:/social-network-microservices/config
+    - ./keys:/keys
+  user-timeline-mongodb:
+    command: "mongod --nojournal --quiet --config /social-network-microservices/config/mongod.conf"
+    depends_on:
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode5.latenseer.latencymodel-pg0.utah.cloudlab.us"
+    hostname: user-timeline-mongodb
+    image: mongo
+    volumes:
+    - ./config:/social-network-microservices/config
+    - ./keys:/keys
+  user-timeline-redis:
+    command: "redis-server /social-network-microservices/config/redis.conf"
+    depends_on:
+    - jaeger-agent
+    - jaeger-query
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode5.latenseer.latencymodel-pg0.utah.cloudlab.us"
+    hostname: user-timeline-redis
+    image: redis
+    volumes:
+    - ./config:/social-network-microservices/config
+    - ./keys:/keys
+  user-timeline-service:
+    command:
+    - "UserTimelineService"
+    depends_on:
+    - user-timeline-mongodb
+    - jaeger-agent
+    deploy:
+      placement:
+        constraints:
+        - "node.hostname==ynode3.latenseer.latencymodel-pg0.utah.cloudlab.us"
+      replicas: 1
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+      restart_policy:
+        condition: any
+    hostname: user-timeline-service
+    image: deathstarbench/social-network-microservices:latest
+    volumes:
+    - ./config:/social-network-microservices/config
+version: '3.8'
